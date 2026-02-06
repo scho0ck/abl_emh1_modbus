@@ -2,7 +2,7 @@ import logging
 import re
 from typing import Optional, Tuple
 import asyncio
-import serial_asyncio
+import serial_asyncio_fast
 from .const import STATE_DESCRIPTIONS, CONF_CONNECTION_TYPE, CONNECTION_TYPE_SERIAL, CONNECTION_TYPE_TCP
 
 from math import ceil
@@ -53,7 +53,7 @@ class SerialTransport(ModbusASCIITransport):
 
     async def open(self):
         try:
-            self.reader, self.writer = await serial_asyncio.open_serial_connection(
+            self.reader, self.writer = await serial_asyncio_fast.open_serial_connection(
                 url=self.port_or_host,
                 baudrate=self.baudrate,
                 bytesize=8,
