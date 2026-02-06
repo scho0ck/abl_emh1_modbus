@@ -8,7 +8,7 @@ This extension is also able to detect if the charger is 16A or 32A ready.
 ## Installation:
 Add the files to your /custom_components/ folder or use the "+" in the integrations tabs
 
-1. Use [HACS](https://hacs.xyz/docs/setup/download), in `HACS > Integrations > Explore & Add Repositories` search for "ev charger". After adding this `https://github.com/matfroh/abl_emh1_modbus` as a custom repository, go to 7.
+1. Use [HACS](https://hacs.xyz/docs/setup/download), in `HACS > Integrations > Explore & Add Repositories` search for "ev charger". After adding this `https://github.com/scho0ck/abl_emh1_modbus` as a custom repository, go to 7.
 2. If you do not have HACS, use the tool of choice to open the directory (folder) for your HA configuration (where you find `configuration.yaml`).
 3. If you do not have a `custom_components` directory (folder) there, you need to create it.
 4. In the `custom_components` directory (folder) create a new folder called `ev_charger_modbus`.
