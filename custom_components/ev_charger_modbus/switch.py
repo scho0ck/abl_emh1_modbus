@@ -15,12 +15,12 @@ _LOGGER = logging.getLogger(__name__)
 class EVChargerSwitch(EVChargerEntity, SwitchEntity):
     """Switch for enabling/disabling EV charging."""
 
-    def __init__(self, coordinator, device_name: str, device: Any):
+    def __init__(self, coordinator, device_name: str, device: Any, unique_base: str):
         """Initialize the switch."""
-        super().__init__(coordinator, device_name)
+        super().__init__(coordinator, device_name, unique_base)
         self._device = device
         self._attr_name = f"{device_name} Charging Enable"
-        self._attr_unique_id = f"{DOMAIN}_{device_name.lower()}_charging_enable"
+        self._attr_unique_id = f"{DOMAIN}_{self._unique_base}_charging_enable"
         _LOGGER.debug("Switch initialized with name: %s, unique_id: %s", 
                      self._attr_name, self._attr_unique_id)
 
@@ -97,6 +97,7 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     device = hass.data[DOMAIN][entry.entry_id]["device"]
     device_name = hass.data[DOMAIN][entry.entry_id][CONF_NAME]
+    unique_base = coordinator.unique_base
     
     if not device:
         _LOGGER.error("Device not initialized in hass.data[%s][%s]", 
@@ -107,6 +108,7 @@ async def async_setup_entry(
         EVChargerSwitch(
             coordinator=coordinator,
             device_name=device_name,
-            device=device
+            device=device,
+            unique_base=unique_base,
         )
     ])

@@ -580,8 +580,11 @@ class ModbusASCIIDevice:
                 response = await self.transport.readline() 
                 _LOGGER.debug(f"Received raw response: {response}")
             
-                expected_prefix = f">{self.slave_id:02X}100014".encode()
-                if expected_prefix in response:
+                expected_prefixes = (
+                    f">{self.slave_id:02X}100014".encode(),
+                    f":{self.slave_id:02X}100014".encode(),
+                )
+                if any(prefix in response for prefix in expected_prefixes):
                     _LOGGER.info(f"Successfully set current to {current}A")
                     return True
                 else:

@@ -19,8 +19,9 @@ async def async_setup_entry(
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     device_name = hass.data[DOMAIN][entry.entry_id][CONF_NAME]
     max_current = hass.data[DOMAIN][entry.entry_id]["max_current"]  # Use actual max from device
+    unique_base = coordinator.unique_base
     
-    entity = ChargingCurrentNumber(coordinator, device_name, max_current)
+    entity = ChargingCurrentNumber(coordinator, device_name, max_current, unique_base)
     hass.data[DOMAIN][entry.entry_id].setdefault("entities", {})
     hass.data[DOMAIN][entry.entry_id]["entities"][entity.entity_id] = entity
     
@@ -29,16 +30,26 @@ async def async_setup_entry(
 class ChargingCurrentNumber(EVChargerEntity, NumberEntity):
     """Representation of the charging current setting."""
 
-    def __init__(self, coordinator, device_name: str, max_current: int) -> None:
+    def __init__(
+        self,
+        coordinator,
+        device_name: str,
+        max_current: int,
+        unique_base: str,
+    ) -> None:
         """Initialize the number entity."""
-        super().__init__(coordinator, device_name)
+        super().__init__(coordinator, device_name, unique_base)
         
         self._attr_name = "Charging Current"
-        self._attr_unique_id = f"{device_name}_charging_current"
+        self._attr_unique_id = f"{self._unique_base}_charging_current"
         self._attr_native_min_value = 0
         self._attr_native_max_value = max_current
         self._attr_native_step = 1
-        self._attr_native_value = coordinator.data.get("charging_current", max_current) if coordinator.data else max_current
+        self._attr_native_value = (
+            coordinator.data.get("charging", {}).get("max_current", max_current)
+            if coordinator.data
+            else max_current
+        )
         self._attr_mode = "slider"
         
         _LOGGER.debug(
@@ -70,4 +81,7 @@ class ChargingCurrentNumber(EVChargerEntity, NumberEntity):
         """Return the current charging current."""
         if self.coordinator.data is None:
             return self._attr_native_value
-        return self.coordinator.data.get("charging_current", self._attr_native_value)
+        return self.coordinator.data.get("charging", {}).get(
+            "max_current",
+            self._attr_native_value,
+        )

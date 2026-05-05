@@ -50,12 +50,18 @@ SET_CHARGING_CURRENT_SCHEMA = vol.Schema({
 
 class EVChargerEntity(CoordinatorEntity):
     """Base class for EV Charger entities."""
-    def __init__(self, coordinator: DataUpdateCoordinator, device_name: str) -> None:
+    def __init__(
+        self,
+        coordinator: DataUpdateCoordinator,
+        device_name: str,
+        unique_base: str,
+    ) -> None:
         """Initialize the entity."""
         super().__init__(coordinator)
         serial_number = getattr(coordinator, "serial_number", None)
         firmware_version = getattr(coordinator, "firmware_version", None)
         hardware_version = getattr(coordinator, "hardware_version", None)
+        self._unique_base = unique_base
 
         # Use the same identifiers as the registered device
         identifiers = {(DOMAIN, serial_number)} if serial_number else {(DOMAIN, device_name)}
@@ -193,6 +199,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     coordinator.firmware_version = firmware_info.get("firmware_version") if firmware_info else None
     coordinator.hardware_version = firmware_info.get("hardware_version") if firmware_info else None
     coordinator.max_current = actual_max_current
+    coordinator.unique_base = serial_number or entry.entry_id
     await coordinator.async_config_entry_first_refresh()
     device_name = entry.data.get(CONF_NAME, DEFAULT_NAME)
 
@@ -216,61 +223,91 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "entities": {},  # Add this to store entities
     }
 
-    # Update service handler to correctly extract target entity from the service call data
-    async def handle_set_charging_current(call: ServiceCall) -> None:
-        """Handle setting the charging current."""
-        current = int(call.data["current"])
-        _LOGGER.debug("Service call data: %s", call.data)
-        
-        # Extract entity_ids from "target" key if available, else fallback to top-level "entity_id"
-        entity_ids = []
-        if "target" in call.data and call.data["target"] is not None:
-            target = call.data["target"]
-            if "entity_id" in target:
-                eids = target["entity_id"]
-                if isinstance(eids, list):
-                    entity_ids = eids
-                elif isinstance(eids, str) and eids.strip():
-                    entity_ids = [eids.strip()]
-        
-        if not entity_ids:
-            e = call.data.get("entity_id")
-            if isinstance(e, list):
-                entity_ids = e
-            elif isinstance(e, str) and e.strip():
-                entity_ids = [e.strip()]
-        
-        if not entity_ids:
-            _LOGGER.error("No target specified. Call data: %s", call.data)
-            return
-        
-        # Instead of looking for entities, use the device directly
-        for entry_data in hass.data[DOMAIN].values():
-            device = entry_data["device"]
-            max_current = entry_data["max_current"]
-            if current > max_current:
-                _LOGGER.error(
-                    "Requested current %d exceeds maximum allowed current %d", 
-                    current, max_current
-                )
-                continue
-            try:
- #               result = await hass.async_add_executor_job(device.write_current, current)
-                result = await device.write_current(current)
-                if result:
-                    _LOGGER.info("Successfully set current to %dA", current)
-                else:
-                    _LOGGER.error("Device did not accept current value %dA", current)
-            except Exception as ex:
-                _LOGGER.error("Failed to set current: %s", str(ex))
+    if not hass.services.has_service(DOMAIN, SET_CHARGING_CURRENT_SERVICE):
+        async def handle_set_charging_current(call: ServiceCall) -> None:
+            """Handle setting the charging current."""
+            current = int(call.data["current"])
+            _LOGGER.debug("Service call data: %s", call.data)
 
-    # Register the service
-    hass.services.async_register(
-        DOMAIN,
-        SET_CHARGING_CURRENT_SERVICE,
-        handle_set_charging_current,
-        schema=SET_CHARGING_CURRENT_SCHEMA
-    )
+            entity_ids = []
+            if "target" in call.data and call.data["target"] is not None:
+                target = call.data["target"]
+                if "entity_id" in target:
+                    eids = target["entity_id"]
+                    if isinstance(eids, list):
+                        entity_ids = eids
+                    elif isinstance(eids, str) and eids.strip():
+                        entity_ids = [eids.strip()]
+
+            if not entity_ids:
+                e = call.data.get("entity_id")
+                if isinstance(e, list):
+                    entity_ids = e
+                elif isinstance(e, str) and e.strip():
+                    entity_ids = [e.strip()]
+
+            if not entity_ids:
+                _LOGGER.error("No target specified. Call data: %s", call.data)
+                return
+
+            entity_registry = er.async_get(hass)
+            target_entry_ids = set()
+            for entity_id in entity_ids:
+                entity_entry = entity_registry.async_get(entity_id)
+                if entity_entry is None:
+                    _LOGGER.error("Unknown entity_id in service call: %s", entity_id)
+                    continue
+                if entity_entry.config_entry_id is None:
+                    _LOGGER.error("Entity %s is not tied to a config entry", entity_id)
+                    continue
+                target_entry_ids.add(entity_entry.config_entry_id)
+
+            if not target_entry_ids:
+                return
+
+            for target_entry_id in target_entry_ids:
+                entry_data = hass.data[DOMAIN].get(target_entry_id)
+                if entry_data is None:
+                    _LOGGER.error("Config entry %s is not loaded", target_entry_id)
+                    continue
+
+                device = entry_data["device"]
+                max_current = entry_data["max_current"]
+                if current > max_current:
+                    _LOGGER.error(
+                        "Requested current %d exceeds maximum allowed current %d",
+                        current,
+                        max_current,
+                    )
+                    continue
+
+                try:
+                    result = await device.write_current(current)
+                    if result:
+                        _LOGGER.info(
+                            "Successfully set current to %dA for %s",
+                            current,
+                            target_entry_id,
+                        )
+                    else:
+                        _LOGGER.error(
+                            "Device did not accept current value %dA for %s",
+                            current,
+                            target_entry_id,
+                        )
+                except Exception as ex:
+                    _LOGGER.error(
+                        "Failed to set current for %s: %s",
+                        target_entry_id,
+                        str(ex),
+                    )
+
+        hass.services.async_register(
+            DOMAIN,
+            SET_CHARGING_CURRENT_SERVICE,
+            handle_set_charging_current,
+            schema=SET_CHARGING_CURRENT_SCHEMA,
+        )
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
@@ -279,7 +316,9 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         device = hass.data[DOMAIN][entry.entry_id]["device"]
-        if device.serial.is_open:
-            device.serial.close()
+        if device.transport and device.transport.is_open:
+            device.transport.close()
         hass.data[DOMAIN].pop(entry.entry_id)
+        if not hass.data[DOMAIN]:
+            hass.services.async_remove(DOMAIN, SET_CHARGING_CURRENT_SERVICE)
     return unload_ok

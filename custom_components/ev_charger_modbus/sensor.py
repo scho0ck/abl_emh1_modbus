@@ -13,9 +13,9 @@ _LOGGER = logging.getLogger(__name__)  # Initialize logger
 
 class EVChargerBaseSensor(EVChargerEntity, SensorEntity):
     """Base class for EV Charger sensors."""
-    def __init__(self, coordinator, name: str, key_path: list):
+    def __init__(self, coordinator, name: str, key_path: list, unique_base: str):
         """Initialize the base sensor."""
-        super().__init__(coordinator, name)
+        super().__init__(coordinator, name, unique_base)
         self._key_path = key_path
 
     def _get_value_from_path(self, data: Dict[str, Any]) -> Any:
@@ -29,11 +29,11 @@ class EVChargerBaseSensor(EVChargerEntity, SensorEntity):
 
 class EVChargerStateSensor(EVChargerBaseSensor):
     """Sensor for EV Charger state."""
-    def __init__(self, coordinator, name: str):
+    def __init__(self, coordinator, name: str, unique_base: str):
         """Initialize the state sensor."""
-        super().__init__(coordinator, name, ["state", "description"])
+        super().__init__(coordinator, name, ["state", "description"], unique_base)
         self._attr_name = "State"
-        self._attr_unique_id = f"{name}_state"
+        self._attr_unique_id = f"{self._unique_base}_state"
 
     @property
     def native_value(self) -> str:
@@ -54,12 +54,12 @@ class EVChargerStateSensor(EVChargerBaseSensor):
 
 class EVChargerCurrentSensor(EVChargerEntity, SensorEntity):
     """Sensor for EV Charger current readings."""
-    def __init__(self, coordinator, device_name: str, current_type: str):
+    def __init__(self, coordinator, device_name: str, current_type: str, unique_base: str):
         """Initialize the current sensor."""
-        super().__init__(coordinator, device_name)
+        super().__init__(coordinator, device_name, unique_base)
         self._current_type = current_type
         self._attr_name = f"Current {current_type.replace('ict', '')}"
-        self._attr_unique_id = f"{device_name}_{current_type}_current"
+        self._attr_unique_id = f"{self._unique_base}_{current_type}_current"
         self._attr_device_class = SensorDeviceClass.CURRENT
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
@@ -76,11 +76,11 @@ class EVChargerCurrentSensor(EVChargerEntity, SensorEntity):
 
 class EVChargerDutyCycleSensor(EVChargerEntity, SensorEntity):
     """Sensor for EV Charger duty cycle."""
-    def __init__(self, coordinator, device_name: str):
+    def __init__(self, coordinator, device_name: str, unique_base: str):
         """Initialize the duty cycle sensor."""
-        super().__init__(coordinator, device_name)
+        super().__init__(coordinator, device_name, unique_base)
         self._attr_name = "Duty Cycle"
-        self._attr_unique_id = f"{device_name}_duty_cycle"
+        self._attr_unique_id = f"{self._unique_base}_duty_cycle"
         self._attr_device_class = SensorDeviceClass.POWER_FACTOR
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = PERCENTAGE
@@ -97,11 +97,11 @@ class EVChargerDutyCycleSensor(EVChargerEntity, SensorEntity):
 
 class EVChargerPowerConsumptionSensor(EVChargerEntity, SensorEntity):
     """Sensor for EV Charger power consumption."""
-    def __init__(self, coordinator, device_name: str):
+    def __init__(self, coordinator, device_name: str, unique_base: str):
         """Initialize the power consumption sensor."""
-        super().__init__(coordinator, device_name)
+        super().__init__(coordinator, device_name, unique_base)
         self._attr_name = "Power Consumption"
-        self._attr_unique_id = f"{device_name}_power_consumption"
+        self._attr_unique_id = f"{self._unique_base}_power_consumption"
         self._attr_device_class = SensorDeviceClass.POWER
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = UnitOfPower.WATT
@@ -120,14 +120,15 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Set up the EV Charger sensors."""
     coordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
     device_name = hass.data[DOMAIN][entry.entry_id][CONF_NAME]
+    unique_base = coordinator.unique_base
     
     sensors = [
-        EVChargerCurrentSensor(coordinator, device_name, "ict1"),
-        EVChargerCurrentSensor(coordinator, device_name, "ict2"),
-        EVChargerCurrentSensor(coordinator, device_name, "ict3"),
-        EVChargerStateSensor(coordinator, device_name),
-        EVChargerDutyCycleSensor(coordinator, device_name),
-        EVChargerPowerConsumptionSensor(coordinator, device_name),
+        EVChargerCurrentSensor(coordinator, device_name, "ict1", unique_base),
+        EVChargerCurrentSensor(coordinator, device_name, "ict2", unique_base),
+        EVChargerCurrentSensor(coordinator, device_name, "ict3", unique_base),
+        EVChargerStateSensor(coordinator, device_name, unique_base),
+        EVChargerDutyCycleSensor(coordinator, device_name, unique_base),
+        EVChargerPowerConsumptionSensor(coordinator, device_name, unique_base),
     ]
     
     _LOGGER.debug("Adding EV Charger sensors: %s", [sensor._attr_name for sensor in sensors])
